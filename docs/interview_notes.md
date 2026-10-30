@@ -1,6 +1,6 @@
 # Simple interview notes
 
-Use these as discussion points. The CSV and code are a demo, not evidence that production controls are operating.
+Focus on three things in the demo: rejected bad rows, dbt tests, and restricted reporting access. Use the remaining notes only if the interviewer asks. The CSV and code are a demo, not evidence that production controls are operating.
 
 ## A short explanation of the code
 

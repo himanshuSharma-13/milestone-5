@@ -1,3 +1,4 @@
+# dbt builds one small reporting table and loads one static demo seed.
 name: retail_orders_simple
 version: '1.0.0'
 config-version: 2

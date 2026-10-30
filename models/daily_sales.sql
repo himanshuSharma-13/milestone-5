@@ -1,4 +1,5 @@
--- The business must approve this simple gross-sales definition.
+-- This table contains only daily totals, so reporting users do not need
+-- customer IDs or individual order rows. The sales owner approves the formula.
 select
     order_date,
     currency,

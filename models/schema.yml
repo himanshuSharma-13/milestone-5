@@ -1,16 +1,35 @@
+# dbt reads these descriptions as simple catalog metadata and runs the tests.
 version: 2
 
 seeds:
   - name: orders_silver
+    description: "Approved demo copy of the clean Databricks orders. No personal details."
+    config:
+      meta:
+        business_owner: "Sales owner (demo role; replace with a real person)"
+        technical_owner: "Data engineer (demo role; replace with a real person)"
+        data_steward: "Order operations (demo role; replace with a real person)"
+        classification: "Internal"
     columns:
       - name: order_id
+        description: "Unique business order identifier."
         data_tests: [not_null, unique]
       - name: customer_id
         data_tests: [not_null]
       - name: order_date
         data_tests: [not_null]
-      - name: order_amount
+      - name: product_id
         data_tests: [not_null]
+      - name: quantity
+        data_tests: [not_null]
+      - name: order_amount
+        description: "Amount in the order's currency; nonnegative values only."
+        data_tests: [not_null]
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['INR', 'USD']
       - name: order_status
         data_tests:
           - accepted_values:
@@ -19,8 +38,18 @@ seeds:
 
 models:
   - name: daily_sales
+    description: "Gross sales by date and currency for PLACED and SHIPPED orders."
+    config:
+      meta:
+        business_owner: "Sales owner (demo role; replace with a real person)"
+        classification: "Internal aggregate; no customer-level rows"
+        lineage: "orders.csv -> Databricks bronze/silver -> dbt seed -> daily_sales"
     columns:
       - name: order_date
+        data_tests: [not_null]
+      - name: currency
+        data_tests: [not_null]
+      - name: order_count
         data_tests: [not_null]
       - name: gross_sales
         data_tests: [not_null]

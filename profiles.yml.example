@@ -1,3 +1,4 @@
+# Keep the real values in environment variables, never in this repository.
 retail_orders_simple:
   target: dev
   outputs:

@@ -23,9 +23,10 @@ Bronze keeps the input. Silver keeps the first row for each order ID and applies
 | `databricks/orders_pipeline.py` | One Databricks notebook: bronze, silver, rejects |
 | `seeds/orders_silver.csv` | Four hand-written valid rows for the Snowflake demo |
 | `models/daily_sales.sql` | Simple daily reporting model |
-| `models/schema.yml` | Basic dbt data tests |
-| `tests/reconcile_daily_sales.sql` | Checks counts and amounts against silver |
-| `docs/interview_notes.md` | Short answers for the governance questions |
+| `models/schema.yml` | Basic dbt tests, definitions, and owner/classification labels |
+| `tests/*.sql` | Valid-value and sales-total checks |
+| `security/reporting_access.sql` | Small reporting-role example |
+| `docs/interview_notes.md` | Short interview answers |
 
 ## Run the Databricks part
 
@@ -35,6 +36,8 @@ Bronze keeps the input. Silver keeps the first row for each order ID and applies
 4. Inspect `retail_demo.orders_bronze`, `retail_demo.orders_silver`, and `retail_demo.orders_rejects` in the current catalog.
 
 The notebook overwrites these three **demo** tables on each run. Re-running the same file gives the same result; it does not append duplicates. It prints the expected counts: bronze 8, silver 4, rejects 4.
+
+The notebook also checks that every bronze row reached either silver or rejects, and that silver has no repeated order IDs. Code comments explain each step.
 
 ## Run the Snowflake + dbt part
 
@@ -58,6 +61,12 @@ Expected `daily_sales`:
 | 2026-10-21 | INR | 1 | 50.00 |
 
 `CANCELLED` is kept in silver but excluded from sales. `gross_sales` means the sum of order amounts for `PLACED` and `SHIPPED` orders in this demo. The business owner would approve the real definition.
+
+## The three controls to discuss
+
+1. **Data quality and testing:** Databricks rejects bad rows with a reason. dbt checks required and unique IDs, valid status/currency, positive quantity, nonnegative amount, dates, and daily sales totals.
+2. **Governance:** `models/schema.yml` records the meaning, owner roles, and classification of the silver data and sales table. A real sales owner must approve the sales definition.
+3. **Security:** The sample contains no names, emails, addresses, or payment references. `daily_sales` exposes only aggregates. If you want to demonstrate a Snowflake reporting role, adapt and run `security/reporting_access.sql`; it grants read access only to `daily_sales`.
 
 ## Scope and limitations
 
