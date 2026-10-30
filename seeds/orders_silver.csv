@@ -1,0 +1,5 @@
+order_id,customer_id,order_date,product_id,quantity,order_amount,currency,order_status,shipment_date
+O100,C1,2026-10-20,P1,1,100.00,INR,PLACED,
+O104,C4,2026-10-20,P4,2,80.00,INR,SHIPPED,2026-10-21
+O105,C5,2026-10-20,P5,1,30.00,INR,CANCELLED,
+O106,C6,2026-10-21,P6,1,50.00,INR,PLACED,

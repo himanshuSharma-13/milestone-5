@@ -1,0 +1,26 @@
+version: 2
+
+seeds:
+  - name: orders_silver
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: order_date
+        data_tests: [not_null]
+      - name: order_amount
+        data_tests: [not_null]
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['PLACED', 'SHIPPED', 'CANCELLED']
+
+models:
+  - name: daily_sales
+    columns:
+      - name: order_date
+        data_tests: [not_null]
+      - name: gross_sales
+        data_tests: [not_null]

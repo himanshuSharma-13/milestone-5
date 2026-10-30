@@ -1,0 +1,23 @@
+name: retail_orders_simple
+version: '1.0.0'
+config-version: 2
+profile: retail_orders_simple
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+models:
+  retail_orders_simple:
+    +materialized: table
+seeds:
+  retail_orders_simple:
+    orders_silver:
+      +column_types:
+        order_id: varchar(20)
+        customer_id: varchar(20)
+        order_date: date
+        product_id: varchar(20)
+        quantity: integer
+        order_amount: decimal(10,2)
+        currency: varchar(3)
+        order_status: varchar(20)
+        shipment_date: date
