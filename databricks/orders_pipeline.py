@@ -8,12 +8,14 @@ if not input_path:
 
 from pyspark.sql import Window, functions as F
 
+# All three layers live in this demo schema in the current Databricks catalog.
 spark.sql("CREATE SCHEMA IF NOT EXISTS retail_demo")
 
 # Bronze: retain every source row as text so bad values remain visible.
 # The overwrite is intentional for this file-based demo: each run starts from
 # exactly the uploaded CSV rather than accumulating rows from earlier runs.
 bronze = spark.read.option("header", True).csv(input_path)
+# CSV inference is deliberately off: bronze preserves the source strings.
 bronze.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_bronze")
 
 # A stable record ID decides which copy of a duplicate order is kept.
@@ -21,6 +23,8 @@ bronze.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
 # row_number gives one winner per order_id; the other copies get rank > 1.
 # In a real feed, the ordering rule would need a business-approved event time.
 first_order = Window.partitionBy("order_id").orderBy("source_record_id")
+# The derived valid_* columns are temporary: failed casts become NULL and are
+# evaluated below before any record can enter silver.
 checked = (bronze
     .withColumn("order_rank", F.row_number().over(first_order))
     .withColumn("valid_date", F.expr("try_cast(order_date AS DATE)"))
@@ -31,6 +35,8 @@ checked = (bronze
 # One simple reason per rejected row makes the exception table easy to read.
 # The order of these rules decides which reason is shown if several fail.
 # For example, a duplicate with a missing customer is labeled as a duplicate.
+# The chain checks identity, required fields, types/ranges, allowed values,
+# then shipment dates. A row with no matching error receives NULL.
 checked = checked.withColumn("error_reason",
     F.when(F.col("order_id").isNull() | (F.trim("order_id") == ""), "MISSING_ORDER_ID")
      .when(F.col("order_rank") > 1, "DUPLICATE_ORDER_ID")
@@ -49,6 +55,8 @@ checked = checked.withColumn("error_reason",
 # Silver uses typed date, quantity, and amount columns; rejects retain the
 # original text so someone can inspect and fix the source record.
 rejects = checked.filter(F.col("error_reason").isNotNull()).select(*bronze.columns, "error_reason")
+# Keep only reporting fields in silver; order_rank and valid_* helper fields
+# were used for validation and do not belong in the clean output contract.
 silver = (checked.filter(F.col("error_reason").isNull())
     .select("order_id", "customer_id", F.col("valid_date").alias("order_date"),
             "product_id", F.col("valid_quantity").alias("quantity"),
@@ -56,6 +64,7 @@ silver = (checked.filter(F.col("error_reason").isNull())
 
 # These two assertions catch silent row loss and duplicate trusted orders.
 # Every bronze row must land in exactly one branch of the split above.
+# The second assertion enforces the one-row-per-order silver grain.
 assert bronze.count() == silver.count() + rejects.count(), "Rows disappeared during validation"
 assert silver.groupBy("order_id").count().filter("count > 1").count() == 0, "Duplicate order in silver"
 
@@ -65,5 +74,6 @@ assert silver.groupBy("order_id").count().filter("count > 1").count() == 0, "Dup
 rejects.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_rejects")
 silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_silver")
 
+# Show the volume of each layer and examples of rows needing correction.
 print(f"bronze={bronze.count()}, silver={silver.count()}, rejects={rejects.count()}")
 display(spark.table("retail_demo.orders_rejects"))

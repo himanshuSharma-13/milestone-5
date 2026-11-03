@@ -3,6 +3,7 @@
 -- The reporting role can read daily_sales, but receives no grant on orders_silver.
 
 create role if not exists RETAIL_REPORTER;
+-- The role needs USAGE at every parent level before it can query a table.
 grant usage on warehouse YOUR_WAREHOUSE to role RETAIL_REPORTER;
 grant usage on database YOUR_DATABASE to role RETAIL_REPORTER;
 grant usage on schema YOUR_DATABASE.YOUR_SCHEMA to role RETAIL_REPORTER;

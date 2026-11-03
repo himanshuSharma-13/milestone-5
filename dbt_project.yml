@@ -8,10 +8,12 @@ seed-paths: ["seeds"]
 test-paths: ["tests"]
 models:
   retail_orders_simple:
+    # Persist daily_sales as a table so reporting users query a stable result.
     +materialized: table
 seeds:
   retail_orders_simple:
     orders_silver:
+      # Fix CSV types at load time instead of relying on warehouse inference.
       +column_types:
         order_id: varchar(20)
         customer_id: varchar(20)
