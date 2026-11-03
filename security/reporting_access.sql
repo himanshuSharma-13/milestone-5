@@ -6,6 +6,8 @@ create role if not exists RETAIL_REPORTER;
 grant usage on warehouse YOUR_WAREHOUSE to role RETAIL_REPORTER;
 grant usage on database YOUR_DATABASE to role RETAIL_REPORTER;
 grant usage on schema YOUR_DATABASE.YOUR_SCHEMA to role RETAIL_REPORTER;
+-- USAGE lets the role reach the warehouse and namespace; this SELECT is the
+-- only table access granted by this script, so it does not expose detail rows.
 grant select on table YOUR_DATABASE.YOUR_SCHEMA.DAILY_SALES to role RETAIL_REPORTER;
 
 -- An administrator can later assign this role to the intended analyst user:

@@ -11,11 +11,15 @@ from pyspark.sql import Window, functions as F
 spark.sql("CREATE SCHEMA IF NOT EXISTS retail_demo")
 
 # Bronze: retain every source row as text so bad values remain visible.
+# The overwrite is intentional for this file-based demo: each run starts from
+# exactly the uploaded CSV rather than accumulating rows from earlier runs.
 bronze = spark.read.option("header", True).csv(input_path)
 bronze.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_bronze")
 
 # A stable record ID decides which copy of a duplicate order is kept.
 # try_cast returns NULL for bad text, which the quality rules reject below.
+# row_number gives one winner per order_id; the other copies get rank > 1.
+# In a real feed, the ordering rule would need a business-approved event time.
 first_order = Window.partitionBy("order_id").orderBy("source_record_id")
 checked = (bronze
     .withColumn("order_rank", F.row_number().over(first_order))
@@ -26,6 +30,7 @@ checked = (bronze
 
 # One simple reason per rejected row makes the exception table easy to read.
 # The order of these rules decides which reason is shown if several fail.
+# For example, a duplicate with a missing customer is labeled as a duplicate.
 checked = checked.withColumn("error_reason",
     F.when(F.col("order_id").isNull() | (F.trim("order_id") == ""), "MISSING_ORDER_ID")
      .when(F.col("order_rank") > 1, "DUPLICATE_ORDER_ID")
@@ -41,6 +46,8 @@ checked = checked.withColumn("error_reason",
      .when(F.col("valid_shipment_date") < F.col("valid_date"), "INVALID_SHIPMENT_DATE"))
 
 # Split the checked rows. Rejects are retained for correction and reruns.
+# Silver uses typed date, quantity, and amount columns; rejects retain the
+# original text so someone can inspect and fix the source record.
 rejects = checked.filter(F.col("error_reason").isNotNull()).select(*bronze.columns, "error_reason")
 silver = (checked.filter(F.col("error_reason").isNull())
     .select("order_id", "customer_id", F.col("valid_date").alias("order_date"),
@@ -48,10 +55,13 @@ silver = (checked.filter(F.col("error_reason").isNull())
             F.col("valid_amount").alias("order_amount"), "currency", "order_status", "shipment_date"))
 
 # These two assertions catch silent row loss and duplicate trusted orders.
+# Every bronze row must land in exactly one branch of the split above.
 assert bronze.count() == silver.count() + rejects.count(), "Rows disappeared during validation"
 assert silver.groupBy("order_id").count().filter("count > 1").count() == 0, "Duplicate order in silver"
 
 # Overwrite makes a rerun of this same small file give the same result.
+# The checks run before either output table is replaced, so a failed check
+# leaves the previous silver and rejects snapshots available for inspection.
 rejects.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_rejects")
 silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_silver")
 
