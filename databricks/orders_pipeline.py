@@ -1,6 +1,6 @@
 # Databricks notebook source
-# Upload data/orders.csv, then set this widget to its Databricks path.
-# A widget avoids putting a personal workspace path in the code.
+# Walkthrough note: upload orders.csv, then enter its Databricks path in the
+# widget. This keeps my personal workspace path out of the shared notebook.
 dbutils.widgets.text("input_path", "")
 input_path = dbutils.widgets.get("input_path")
 if not input_path:
@@ -8,23 +8,22 @@ if not input_path:
 
 from pyspark.sql import Window, functions as F
 
-# All three layers live in this demo schema in the current Databricks catalog.
+# Note: I keep bronze, silver, and rejects together in one demo schema.
 spark.sql("CREATE SCHEMA IF NOT EXISTS retail_demo")
 
-# Bronze: retain every source row as text so bad values remain visible.
-# The overwrite is intentional for this file-based demo: each run starts from
-# exactly the uploaded CSV rather than accumulating rows from earlier runs.
+# Step 1 - Bronze is the raw copy. I keep every CSV value as text so I can
+# inspect bad source values later. Overwrite means a rerun starts from this
+# file again instead of adding the same eight rows twice.
 bronze = spark.read.option("header", True).csv(input_path)
-# CSV inference is deliberately off: bronze preserves the source strings.
+# Spark's CSV reader uses string columns here because schema inference is off.
 bronze.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_bronze")
 
-# A stable record ID decides which copy of a duplicate order is kept.
-# try_cast returns NULL for bad text, which the quality rules reject below.
-# row_number gives one winner per order_id; the other copies get rank > 1.
-# In a real feed, the ordering rule would need a business-approved event time.
+# Step 2 - Rank copies of each order by source_record_id. Rank 1 is the copy
+# considered for silver; later copies are rejected. This is a demo rule, not
+# a production definition of the latest order (which would need event time).
 first_order = Window.partitionBy("order_id").orderBy("source_record_id")
-# The derived valid_* columns are temporary: failed casts become NULL and are
-# evaluated below before any record can enter silver.
+# Note: try_cast converts valid text to typed values and turns bad text into
+# NULL. These valid_* columns are helpers for checking and building silver.
 checked = (bronze
     .withColumn("order_rank", F.row_number().over(first_order))
     .withColumn("valid_date", F.expr("try_cast(order_date AS DATE)"))
@@ -32,11 +31,9 @@ checked = (bronze
     .withColumn("valid_amount", F.expr("try_cast(order_amount AS DECIMAL(10,2))"))
     .withColumn("valid_quantity", F.expr("try_cast(quantity AS INT)")))
 
-# One simple reason per rejected row makes the exception table easy to read.
-# The order of these rules decides which reason is shown if several fail.
-# For example, a duplicate with a missing customer is labeled as a duplicate.
-# The chain checks identity, required fields, types/ranges, allowed values,
-# then shipment dates. A row with no matching error receives NULL.
+# Step 3 - Assign one explanation to each bad row. The first matching rule
+# wins: a duplicate with a missing customer is labeled as a duplicate.
+# No matching rule means error_reason is NULL and the row can enter silver.
 checked = checked.withColumn("error_reason",
     F.when(F.col("order_id").isNull() | (F.trim("order_id") == ""), "MISSING_ORDER_ID")
      .when(F.col("order_rank") > 1, "DUPLICATE_ORDER_ID")
@@ -51,29 +48,26 @@ checked = checked.withColumn("error_reason",
      .when(F.col("shipment_date").isNotNull() & F.col("valid_shipment_date").isNull(), "INVALID_SHIPMENT_DATE")
      .when(F.col("valid_shipment_date") < F.col("valid_date"), "INVALID_SHIPMENT_DATE"))
 
-# Split the checked rows. Rejects are retained for correction and reruns.
-# Silver uses typed date, quantity, and amount columns; rejects retain the
-# original text so someone can inspect and fix the source record.
+# Step 4 - Split on error_reason. Rejects keep the original CSV values plus
+# the reason, which helps someone correct the source data.
 rejects = checked.filter(F.col("error_reason").isNotNull()).select(*bronze.columns, "error_reason")
-# Keep only reporting fields in silver; order_rank and valid_* helper fields
-# were used for validation and do not belong in the clean output contract.
+# Silver gets the accepted rows and typed fields used by downstream reporting.
+# The temporary rank and validation columns are left out.
 silver = (checked.filter(F.col("error_reason").isNull())
     .select("order_id", "customer_id", F.col("valid_date").alias("order_date"),
             "product_id", F.col("valid_quantity").alias("quantity"),
             F.col("valid_amount").alias("order_amount"), "currency", "order_status", "shipment_date"))
 
-# These two assertions catch silent row loss and duplicate trusted orders.
-# Every bronze row must land in exactly one branch of the split above.
-# The second assertion enforces the one-row-per-order silver grain.
+# Step 5 - Check the split before writing tables. Bronze count must equal
+# silver plus rejects, and silver must have at most one row per order ID.
 assert bronze.count() == silver.count() + rejects.count(), "Rows disappeared during validation"
 assert silver.groupBy("order_id").count().filter("count > 1").count() == 0, "Duplicate order in silver"
 
-# Overwrite makes a rerun of this same small file give the same result.
-# The checks run before either output table is replaced, so a failed check
-# leaves the previous silver and rejects snapshots available for inspection.
+# Note: output tables are replaced only after both checks pass. A failed
+# check leaves the previous silver and rejects tables available to inspect.
 rejects.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_rejects")
 silver.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable("retail_demo.orders_silver")
 
-# Show the volume of each layer and examples of rows needing correction.
+# Final check for the demo: show layer counts and the rejected rows.
 print(f"bronze={bronze.count()}, silver={silver.count()}, rejects={rejects.count()}")
 display(spark.table("retail_demo.orders_rejects"))

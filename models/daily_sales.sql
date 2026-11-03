@@ -1,16 +1,16 @@
--- This table contains only daily totals, so reporting users do not need
--- customer IDs or individual order rows. The sales owner approves the formula.
--- Cancelled orders remain in silver for traceability but do not contribute
--- to this demo's sales count or amount. Currency stays in the grouping key
--- so unlike currencies are never added together.
--- One output row represents one order date and one currency.
+-- Walkthrough note: this model turns clean orders into one row per day and
+-- currency. Reporting users see totals without customer or order details.
+-- PLACED and SHIPPED count as sales in this demo; CANCELLED stays in silver
+-- for history but does not contribute to these totals. A sales owner would
+-- approve the real definition before production use.
 select
     order_date,
     currency,
-    -- Count each eligible silver order once; order_amount is already typed.
+    -- Count orders and sum their amounts within each day/currency group.
     count(*) as order_count,
     sum(order_amount) as gross_sales
--- ref() records the dependency so dbt builds the seed before this model.
+-- Note: ref() tells dbt that the silver seed is this model's input.
 from {{ ref('orders_silver') }}
 where order_status in ('PLACED', 'SHIPPED')
+-- Keep currencies separate; adding INR and USD would give a meaningless sum.
 group by order_date, currency

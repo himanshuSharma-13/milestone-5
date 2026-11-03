@@ -1,8 +1,9 @@
-# dbt reads these descriptions as simple catalog metadata and runs the tests.
+# Walkthrough note: this file records what the seed/model mean, who owns them,
+# and which checks dbt should run when I execute dbt test.
 version: 2
 
 seeds:
-  # The CSV seed stands in for a transfer from Databricks silver to Snowflake.
+  # In this demo, the CSV seed stands in for a Databricks-to-Snowflake transfer.
   - name: orders_silver
     description: "Approved demo copy of the clean Databricks orders. No personal details."
     config:
@@ -12,7 +13,7 @@ seeds:
         data_steward: "Order operations (demo role; replace with a real person)"
         classification: "Internal"
     columns:
-      # These built-in tests return failing rows when IDs are absent or repeated.
+      # A valid order needs an ID, and two silver rows cannot share that ID.
       - name: order_id
         description: "Unique business order identifier."
         data_tests: [not_null, unique]
@@ -28,7 +29,7 @@ seeds:
         description: "Amount in the order's currency; nonnegative values only."
         data_tests: [not_null]
       - name: currency
-        # accepted_values checks the same two demo currencies as the notebook.
+        # Keep the allowed currencies consistent with the Databricks notebook.
         data_tests:
           - accepted_values:
               arguments:
@@ -40,7 +41,7 @@ seeds:
                 values: ['PLACED', 'SHIPPED', 'CANCELLED']
 
 models:
-  # This metadata documents the published aggregate and its ownership.
+  # This is the published aggregate, so its grain and owner are explicit.
   - name: daily_sales
     description: "Gross sales by date and currency for PLACED and SHIPPED orders."
     config:

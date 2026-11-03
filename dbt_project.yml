@@ -1,4 +1,5 @@
-# dbt builds one small reporting table and loads one static demo seed.
+# Walkthrough note: dbt loads the clean-order CSV seed, builds daily_sales,
+# and finds its models, seeds, and tests in the paths below.
 name: retail_orders_simple
 version: '1.0.0'
 config-version: 2
@@ -8,12 +9,12 @@ seed-paths: ["seeds"]
 test-paths: ["tests"]
 models:
   retail_orders_simple:
-    # Persist daily_sales as a table so reporting users query a stable result.
+    # Materialize the result as a table for reporting queries.
     +materialized: table
 seeds:
   retail_orders_simple:
     orders_silver:
-      # Fix CSV types at load time instead of relying on warehouse inference.
+      # Give CSV fields explicit Snowflake types when dbt loads the seed.
       +column_types:
         order_id: varchar(20)
         customer_id: varchar(20)

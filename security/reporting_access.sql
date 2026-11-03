@@ -1,15 +1,14 @@
--- Example for a personal Snowflake account. Replace the three names below.
--- Run as an administrator or a role allowed to create roles and grant access.
--- The reporting role can read daily_sales, but receives no grant on orders_silver.
+-- Walkthrough note: replace the warehouse, database, and schema names before
+-- running this example as an administrator or another role that can grant access.
+-- The aim is to let an analyst query daily totals without granting detail rows.
 
 create role if not exists RETAIL_REPORTER;
--- The role needs USAGE at every parent level before it can query a table.
+-- USAGE opens the warehouse and the path to the table; it does not grant SELECT.
 grant usage on warehouse YOUR_WAREHOUSE to role RETAIL_REPORTER;
 grant usage on database YOUR_DATABASE to role RETAIL_REPORTER;
 grant usage on schema YOUR_DATABASE.YOUR_SCHEMA to role RETAIL_REPORTER;
--- USAGE lets the role reach the warehouse and namespace; this SELECT is the
--- only table access granted by this script, so it does not expose detail rows.
+-- This is the only SELECT granted by this script: orders_silver is excluded.
 grant select on table YOUR_DATABASE.YOUR_SCHEMA.DAILY_SALES to role RETAIL_REPORTER;
 
--- An administrator can later assign this role to the intended analyst user:
+-- Note: an administrator can then assign the role to an analyst user:
 -- grant role RETAIL_REPORTER to user YOUR_ANALYST_USER;

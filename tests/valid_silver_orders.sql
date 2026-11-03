@@ -1,8 +1,6 @@
--- dbt fails this test if it finds a row that should not be in silver.
--- These checks protect the main reporting inputs beyond not-null tests.
--- Any returned order_id is a failing example for dbt to report.
--- The seed's schema tests cover presence and accepted categories; this query
--- adds numeric ranges and rejects future-dated orders.
+-- Walkthrough note: dbt expects this query to return no order IDs. A returned
+-- ID points to a silver row with a bad quantity, amount, or future date.
+-- The separate schema tests cover missing IDs and allowed status/currency.
 select order_id
 from {{ ref('orders_silver') }}
 where quantity <= 0
